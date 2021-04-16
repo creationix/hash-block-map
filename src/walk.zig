@@ -3,10 +3,10 @@ const std = @import("std");
 fn walk(hash: u256, comptime size: u8) void {
     comptime var offset: u32 = 0;
     comptime const mask = (2 << (size - 1)) - 1;
-    std.debug.print("size = {} mask = {}\n", .{ size, mask });
-    inline while (offset < (255 - (size - 1))) {
+    std.debug.print("size = {} mask = 0x{x}\n", .{ size, mask });
+    inline while (offset < @bitSizeOf(@TypeOf(hash))) {
         const bits = @intCast(u64, (hash >> offset) & mask);
-        std.debug.print("offset = {} bits = {}\n", .{ offset, bits });
+        std.debug.print("offset = {} bits = 0x{x}\n", .{ offset, bits });
         offset += size;
     }
 }
@@ -14,7 +14,8 @@ fn walk(hash: u256, comptime size: u8) void {
 test "walk" {
     inline for (.{ 2, 9, 17, 37 }) |size| {
         std.debug.print("Walk {} at a time...\n", .{size});
-        walk(0x123456789abcdef, size);
+        // walk(0x123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef0, size);
+        walk(0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff, size);
     }
 }
 
