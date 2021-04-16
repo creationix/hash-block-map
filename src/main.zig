@@ -1,6 +1,8 @@
 const std = @import("std");
+const sha2 = std.crypto.hash.sha2;
 
 const Hash = u256;
+const Digest = [4]u64;
 
 fn AutoMap(comptime BLOCK_POWER: comptime_int) type {
     return struct {
@@ -36,8 +38,27 @@ fn AutoMap(comptime BLOCK_POWER: comptime_int) type {
             self.* = undefined;
         }
 
-        pub fn store(self: *Self, block: Block) Hash {
-            return 0;
+        // Convert a digest to a big endian number.
+        fn digestToHash(digest: *const Digest) Hash {
+            return (@intCast(u256, std.mem.bigToNative(u64, digest[0])) << 192) | (@intCast(u256, std.mem.bigToNative(u64, digest[1])) << 128) | (@intCast(u256, std.mem.bigToNative(u64, digest[2])) << 64) | (@intCast(u256, std.mem.bigToNative(u64, digest[3])) << 0);
+        }
+
+        pub fn store(self: *Self, block: *const Block, digest: *Digest) void {
+
+            // First calculate the SHA256 digest of the block of data.
+            sha2.Sha256.hash(block, @ptrCast(*[32]u8, digest), .{});
+
+            // Convert it into a giant number (interpreted as big endian)
+            const hash = digestToHash(digest);
+
+            var index: u8 = 0;
+
+            //         inline while (index * Map.BRANCH_POWER < @bitSizeOf(@TypeOf(hash))) {
+            //             const bits = Map.getBitSlice(hash, index);
+            //             std.debug.print("index = {} bits = 0x{x}\n", .{ index, bits });
+            //             index += 1;
+            //         }
+
         }
 
         // Get a slice of bits from the giant hash value.
@@ -65,29 +86,43 @@ test "Ensure proper branch factor" {
     }
 }
 
-test "walk" {
-    inline for (.{ 10, 12, 15 }) |BLOCK_POWER| {
-        const Map = AutoMap(BLOCK_POWER);
-        std.debug.print("\nBLOCK_POWER = {}\n", .{BLOCK_POWER});
-        std.debug.print("Map.BLOCK_SIZE = {}\n", .{Map.BLOCK_SIZE});
-        std.debug.print("Map.BRANCH_POWER = {}\n", .{Map.BRANCH_POWER});
-        // std.debug.print("Map.BRANCH_FACTOR = {}\n", .{Map.BRANCH_FACTOR});
-        // std.debug.print("@sizeOf(Map.Hash) = {}\n", .{@sizeOf(Map.Hash)});
-        // std.debug.print("@sizeOf(Map.Block) = {}\n", .{@sizeOf(Map.Block)});
-        // std.debug.print("@sizeOf(Map.Branch) = {}\n", .{@sizeOf(Map.Branch)});
-        // std.debug.print("@sizeOf(Map.Leaf) = {}\n", .{@sizeOf(Map.Leaf)});
-        // std.debug.print("@sizeOf(?*Map.Node) = {}\n", .{@sizeOf(?*Map.Node)});
+test "write" {
+    const Map = AutoMap(12);
+    var map = try Map.init(std.testing.allocator);
+    defer map.deinit();
 
-        const hash: Hash = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-        comptime var index: u32 = 0;
-        std.debug.print("BRANCH_POWER = {}\n", .{Map.BRANCH_POWER});
-        inline while (index * Map.BRANCH_POWER < @bitSizeOf(@TypeOf(hash))) {
-            const bits = Map.getBitSlice(hash, index);
-            std.debug.print("index = {} bits = 0x{x}\n", .{ index, bits });
-            index += 1;
-        }
-    }
+    const block: Map.Block = .{0} ** Map.BLOCK_SIZE;
+    var digest: Digest = undefined;
+    map.store(&block, &digest);
+    std.debug.print("\ndigest = {*} | {x:8} {x:8} {x:8} {x:8}\n", .{ &digest, digest[0], digest[1], digest[2], digest[3] });
+    const hash = Map.digestToHash(&digest);
+    std.testing.expect(hash == 0xad7facb2586fc6e966c004d7d1d16b024f5805ff7cb47c7a85dabd8b48892ca7);
+    // std.testing.expectEqual(hash, @intCast(u256,0xad7facb2586fc6e966c004d7d1d16b024f5805ff7cb47c7a85dabd8b48892ca7));
 }
+
+// test "walk" {
+//     inline for (.{ 10, 12, 15 }) |BLOCK_POWER| {
+//         const Map = AutoMap(BLOCK_POWER);
+//         std.debug.print("\nBLOCK_POWER = {}\n", .{BLOCK_POWER});
+//         std.debug.print("Map.BLOCK_SIZE = {}\n", .{Map.BLOCK_SIZE});
+//         std.debug.print("Map.BRANCH_POWER = {}\n", .{Map.BRANCH_POWER});
+//         // std.debug.print("Map.BRANCH_FACTOR = {}\n", .{Map.BRANCH_FACTOR});
+//         // std.debug.print("@sizeOf(Map.Hash) = {}\n", .{@sizeOf(Map.Hash)});
+//         // std.debug.print("@sizeOf(Map.Block) = {}\n", .{@sizeOf(Map.Block)});
+//         // std.debug.print("@sizeOf(Map.Branch) = {}\n", .{@sizeOf(Map.Branch)});
+//         // std.debug.print("@sizeOf(Map.Leaf) = {}\n", .{@sizeOf(Map.Leaf)});
+//         // std.debug.print("@sizeOf(?*Map.Node) = {}\n", .{@sizeOf(?*Map.Node)});
+
+//         const hash: Hash = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+//         comptime var index: u32 = 0;
+//         std.debug.print("BRANCH_POWER = {}\n", .{Map.BRANCH_POWER});
+//         inline while (index * Map.BRANCH_POWER < @bitSizeOf(@TypeOf(hash))) {
+//             const bits = Map.getBitSlice(hash, index);
+//             std.debug.print("index = {} bits = 0x{x}\n", .{ index, bits });
+//             index += 1;
+//         }
+//     }
+// }
 
 // pub fn main() anyerror!void {
 
