@@ -52,7 +52,16 @@ fn AutoMap(comptime BLOCK_POWER: comptime_int) type {
             const hash = digestToHash(digest);
 
             var index: u8 = 0;
-
+            var node: *Node = self.root;
+            while (index < (256 / BRANCH_POWER)) {
+                const slice = getBitSlice(hash, index);
+                const t = switch (node.*) {
+                    Node.branch => |branch| "branch",
+                    Node.leaf => |leaf| "leaf",
+                };
+                std.debug.print("\nindex = {} | slice = 0x{x} | node = {s}\n", .{ index, slice, t });
+                index += 1;
+            }
             //         inline while (index * Map.BRANCH_POWER < @bitSizeOf(@TypeOf(hash))) {
             //             const bits = Map.getBitSlice(hash, index);
             //             std.debug.print("index = {} bits = 0x{x}\n", .{ index, bits });
