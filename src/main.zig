@@ -184,12 +184,13 @@ test "Ensure proper branch factor" {
 // }
 
 pub fn main() anyerror!void {
-    // var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    // defer arena.deinit();
-    // const allocator = &arena.allocator;
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = &arena.allocator;
+    // const allocator = std.heap.page_allocator;
 
-    const Map = autoMap(16);
-    var map = try Map.init(std.heap.page_allocator);
+    const Map = autoMap(12);
+    var map = try Map.init(allocator);
     defer map.deinit();
 
     map.walk();
@@ -197,10 +198,10 @@ pub fn main() anyerror!void {
     var digest: Digest = undefined;
     var i: u8 = 0;
     while (i < 255) : (i += 1) {
+        std.debug.print("levels: {} - branches: {} - leaves: {}\n", .{ maxLevel, branchCount, leafCount });
         block[0] = i;
         var j: u8 = 0;
         while (j < 255) : (j += 1) {
-            std.debug.print("levels: {} - branches: {} - leaves: {}\n", .{ maxLevel, branchCount, leafCount });
             block[1] = j;
             var k: u8 = 0;
             while (k < 255) : (k += 1) {
