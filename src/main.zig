@@ -97,7 +97,7 @@ fn autoMap(comptime BLOCK_POWER: comptime_int) comptime type {
             return (@intCast(u256, std.mem.bigToNative(u64, digest[0])) << 192) | (@intCast(u256, std.mem.bigToNative(u64, digest[1])) << 128) | (@intCast(u256, std.mem.bigToNative(u64, digest[2])) << 64) | (@intCast(u256, std.mem.bigToNative(u64, digest[3])) << 0);
         }
 
-        pub fn fetch(self: *Self, digest: *const Digest) !?*const Block {
+        pub fn fetch(self: *Self, digest: *const Digest) ?*const Block {
             // Get the numerical version of the hash so we can walk he bits.
             const hash = digestToHash(digest);
             var index: u8 = 0;
@@ -213,35 +213,24 @@ test "reading and writing..." {
             try map.store(&block, &digest);
 
             // Make sure we can retrieve it back.
-            if (try map.fetch(&digest)) |stored| {
-                std.testing.expectEqualSlices(u8, stored, &block);
-            } else {
-                std.testing.expect(false);
-            }
-            // test with end of hash wrong
-            digest[3] += 1;
-            if (try map.fetch(&digest)) |stored| {
-                std.testing.expect(false);
-            } else {
-                std.testing.expect(true);
-            }
+            std.testing.expectEqualSlices(u8, &block, map.fetch(&digest) orelse return error.ExpectedValueNotReturned);
 
-            // Store it twice to test duplicates
+            // test with end of hash wrong and verify it's not found.
+            digest[3] += 1;
+            std.testing.expectEqual(map.fetch(&digest), null);
+
+            // Store it again to test duplicates
             try map.store(&block, &digest);
 
             // Make sure we can retrieve it back again
-            if (try map.fetch(&digest)) |stored| {
-                std.testing.expectEqualSlices(u8, stored, &block);
-            } else {
-                std.testing.expect(false);
-            }
-            // Test with start of hash wrong
+            const stored = (map.fetch(&digest)) orelse return error.ExpectedValueNotReturned;
+            std.testing.expectEqualSlices(u8, &block, stored);
+            // Make sure it stored a copy of the memory we gave it.
+            std.testing.expect(stored != &block);
+
+            // Test with start of hash wrong and verify it's not found.
             digest[0] += 1;
-            if (try map.fetch(&digest)) |stored| {
-                std.testing.expect(false);
-            } else {
-                std.testing.expect(true);
-            }
+            std.testing.expectEqual(map.fetch(&digest), null);
         }
         // std.debug.print("levels: {} - branches: {} - leaves: {}\n", .{ maxLevel, branchCount, leafCount });
         std.testing.expectEqual(leafCount, inserts);
