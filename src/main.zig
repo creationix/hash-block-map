@@ -159,29 +159,32 @@ test "Ensure proper branch factor" {
     }
 }
 
-// test "walk" {
-//     inline for (.{ 10, 12, 15 }) |BLOCK_POWER| {
-//         const Map = autoMap(BLOCK_POWER);
-//         std.debug.print("\nBLOCK_POWER = {}\n", .{BLOCK_POWER});
-//         std.debug.print("Map.BLOCK_SIZE = {}\n", .{Map.BLOCK_SIZE});
-//         std.debug.print("Map.BRANCH_POWER = {}\n", .{Map.BRANCH_POWER});
-//         // std.debug.print("Map.BRANCH_FACTOR = {}\n", .{Map.BRANCH_FACTOR});
-//         // std.debug.print("@sizeOf(Map.Hash) = {}\n", .{@sizeOf(Map.Hash)});
-//         // std.debug.print("@sizeOf(Map.Block) = {}\n", .{@sizeOf(Map.Block)});
-//         // std.debug.print("@sizeOf(Map.Branch) = {}\n", .{@sizeOf(Map.Branch)});
-//         // std.debug.print("@sizeOf(Map.Leaf) = {}\n", .{@sizeOf(Map.Leaf)});
-//         // std.debug.print("@sizeOf(?*Map.Node) = {}\n", .{@sizeOf(?*Map.Node)});
+test "for memory leaks in Map.write" {
+    inline for (.{ 6, 9, 12, 15 }) |BLOCK_POWER| {
+        const Map = autoMap(BLOCK_POWER);
+        std.debug.print("\nBLOCK_POWER = {}\n", .{BLOCK_POWER});
+        // std.debug.print("Map.BLOCK_SIZE = {}\n", .{Map.BLOCK_SIZE});
+        // std.debug.print("Map.BRANCH_POWER = {}\n", .{Map.BRANCH_POWER});
 
-//         const hash: Hash = 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
-//         comptime var index: u32 = 0;
-//         std.debug.print("BRANCH_POWER = {}\n", .{Map.BRANCH_POWER});
-//         inline while (index * Map.BRANCH_POWER < @bitSizeOf(@TypeOf(hash))) {
-//             const bits = Map.getBitSlice(hash, index);
-//             std.debug.print("index = {} bits = 0x{x}\n", .{ index, bits });
-//             index += 1;
-//         }
-//     }
-// }
+        var map = try Map.init(std.testing.allocator);
+        defer map.deinit();
+        maxLevel = 0;
+        branchCount = 0;
+        leafCount = 0;
+
+        var block: Map.Block = .{0} ** Map.BLOCK_SIZE;
+        var digest: Digest = undefined;
+        var i: u32 = 0;
+        const inserts = 0x100000 / Map.BLOCK_SIZE;
+        std.debug.print("inserts={}\n", .{inserts});
+        while (i < inserts) : (i += 1) {
+            block[0] = @intCast(u8, i & 0xff);
+            block[1] = @intCast(u8, (i >> 8) & 0xff);
+            try map.store(&block, &digest);
+        }
+        std.debug.print("levels: {} - branches: {} - leaves: {}\n", .{ maxLevel, branchCount, leafCount });
+    }
+}
 
 pub fn main() anyerror!void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
@@ -189,9 +192,9 @@ pub fn main() anyerror!void {
     const allocator = &arena.allocator;
     // const allocator = std.heap.page_allocator;
 
-    const Map = autoMap(12);
+    const Map = autoMap(10);
     var map = try Map.init(allocator);
-    defer map.deinit();
+    // defer map.deinit();
 
     map.walk();
     var block: Map.Block = .{0} ** Map.BLOCK_SIZE;
