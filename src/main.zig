@@ -97,6 +97,33 @@ fn autoMap(comptime BLOCK_POWER: comptime_int) comptime type {
             return (@intCast(u256, std.mem.bigToNative(u64, digest[0])) << 192) | (@intCast(u256, std.mem.bigToNative(u64, digest[1])) << 128) | (@intCast(u256, std.mem.bigToNative(u64, digest[2])) << 64) | (@intCast(u256, std.mem.bigToNative(u64, digest[3])) << 0);
         }
 
+        pub fn fetch(self: *Self, digest: *const Digest) !?*const Block {
+            // Get the numerical version of the hash so we can walk he bits.
+            const hash = digestToHash(digest);
+            var index: u8 = 0;
+            var node: ?*Node = self.root;
+            while (index < (256 / BRANCH_POWER)) : (index += 1) {
+                if (node) |realNode| {
+                    switch (realNode.*) {
+                        Node.branch => |*branch| {
+                            // Walk down a branch if found...
+                            node = branch[getBitSlice(hash, index)];
+                        },
+                        Node.leaf => |*leaf| {
+                            if (std.mem.eql(u64, &(leaf.digest), digest)) {
+                                return &(leaf.block);
+                            }
+                            break;
+                        },
+                    }
+                } else {
+                    break;
+                }
+            }
+            // I guess it wasn't there.
+            return null;
+        }
+
         pub fn store(self: *Self, block: *const Block, digest: *Digest) !void {
 
             // First calculate the SHA256 digest of the block of data.
@@ -116,7 +143,9 @@ fn autoMap(comptime BLOCK_POWER: comptime_int) comptime type {
                             node = &(branch[getBitSlice(hash, index)]);
                         },
                         Node.leaf => |*leaf| {
-                            // TODO: check if existing leaf is same as the one we're writing...
+                            if (std.mem.eql(u64, &(leaf.digest), digest)) {
+                                return;
+                            }
 
                             // We need to split this leaf into a branch and two leaves.
                             var branch: *Node = try self.newBranch();
@@ -159,10 +188,10 @@ test "Ensure proper branch factor" {
     }
 }
 
-test "for memory leaks in Map.write" {
+test "reading and writing..." {
     inline for (.{ 6, 9, 12, 15 }) |BLOCK_POWER| {
         const Map = autoMap(BLOCK_POWER);
-        std.debug.print("\nBLOCK_POWER = {}\n", .{BLOCK_POWER});
+        // std.debug.print("\nBLOCK_POWER = {}\n", .{BLOCK_POWER});
         // std.debug.print("Map.BLOCK_SIZE = {}\n", .{Map.BLOCK_SIZE});
         // std.debug.print("Map.BRANCH_POWER = {}\n", .{Map.BRANCH_POWER});
 
@@ -175,14 +204,47 @@ test "for memory leaks in Map.write" {
         var block: Map.Block = .{0} ** Map.BLOCK_SIZE;
         var digest: Digest = undefined;
         var i: u32 = 0;
-        const inserts = 0x100000 / Map.BLOCK_SIZE;
-        std.debug.print("inserts={}\n", .{inserts});
+        const inserts = 0x8000 / Map.BLOCK_SIZE;
         while (i < inserts) : (i += 1) {
             block[0] = @intCast(u8, i & 0xff);
             block[1] = @intCast(u8, (i >> 8) & 0xff);
+            block[2] = @intCast(u8, (i >> 16) & 0xff);
+            block[3] = @intCast(u8, (i >> 24) & 0xff);
             try map.store(&block, &digest);
+
+            // Make sure we can retrieve it back.
+            if (try map.fetch(&digest)) |stored| {
+                std.testing.expectEqualSlices(u8, stored, &block);
+            } else {
+                std.testing.expect(false);
+            }
+            // test with end of hash wrong
+            digest[3] += 1;
+            if (try map.fetch(&digest)) |stored| {
+                std.testing.expect(false);
+            } else {
+                std.testing.expect(true);
+            }
+
+            // Store it twice to test duplicates
+            try map.store(&block, &digest);
+
+            // Make sure we can retrieve it back again
+            if (try map.fetch(&digest)) |stored| {
+                std.testing.expectEqualSlices(u8, stored, &block);
+            } else {
+                std.testing.expect(false);
+            }
+            // Test with start of hash wrong
+            digest[0] += 1;
+            if (try map.fetch(&digest)) |stored| {
+                std.testing.expect(false);
+            } else {
+                std.testing.expect(true);
+            }
         }
-        std.debug.print("levels: {} - branches: {} - leaves: {}\n", .{ maxLevel, branchCount, leafCount });
+        // std.debug.print("levels: {} - branches: {} - leaves: {}\n", .{ maxLevel, branchCount, leafCount });
+        std.testing.expectEqual(leafCount, inserts);
     }
 }
 
