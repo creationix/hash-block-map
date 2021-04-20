@@ -189,7 +189,7 @@ test "Ensure proper branch factor" {
 }
 
 test "reading and writing..." {
-    inline for (.{ 6, 9, 12, 15 }) |BLOCK_POWER| {
+    inline for (.{ 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 }) |BLOCK_POWER| {
         const Map = autoMap(BLOCK_POWER);
         // std.debug.print("\nBLOCK_POWER = {}\n", .{BLOCK_POWER});
         // std.debug.print("Map.BLOCK_SIZE = {}\n", .{Map.BLOCK_SIZE});
@@ -205,7 +205,7 @@ test "reading and writing..." {
         var block: Map.Block = .{0} ** Map.BLOCK_SIZE;
         var digest: Digest = undefined;
         var i: u32 = 0;
-        const inserts = 0x8000 / Map.BLOCK_SIZE;
+        const inserts = 0x10000 >> BLOCK_POWER;
         while (i < inserts) : (i += 1) {
             block[0] = @intCast(u8, i & 0xff);
             block[1] = @intCast(u8, (i >> 8) & 0xff);
