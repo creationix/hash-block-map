@@ -41,12 +41,12 @@ fn autoMap(comptime BLOCK_POWER: comptime_int) comptime type {
             return Self{ .allocator = allocator, .root = null };
         }
 
-        fn clearNode(self: *Self, node: **Node) void {
-            switch (node.*.*) {
+        fn clearNode(self: *Self, node: *Node) void {
+            switch (node.*) {
                 Node.branch => |*branch| {
                     var i: usize = 0;
                     while (i < BRANCH_FACTOR) : (i += 1) {
-                        if (branch[i]) |*childNode| {
+                        if (branch[i]) |childNode| {
                             self.clearNode(childNode);
                             branch[i] = null;
                         }
@@ -54,11 +54,11 @@ fn autoMap(comptime BLOCK_POWER: comptime_int) comptime type {
                 },
                 Node.leaf => |*leaf| {},
             }
-            self.allocator.destroy(node.*);
+            self.allocator.destroy(node);
         }
 
         pub fn clear(self: *Self) void {
-            if (self.root) |*root| {
+            if (self.root) |root| {
                 self.clearNode(root);
                 self.root = null;
             }
@@ -148,7 +148,7 @@ fn autoMap(comptime BLOCK_POWER: comptime_int) comptime type {
                             }
 
                             // We need to split this leaf into a branch and two leaves.
-                            var branch: *Node = try self.newBranch();
+                            const branch: *Node = try self.newBranch();
                             // Move the old leaf to the new branch.
                             branch.branch[getBitSlice(digestToHash(&leaf.digest), index)] = realNode.*;
                             // Move the pointer to the new branch.
@@ -164,9 +164,9 @@ fn autoMap(comptime BLOCK_POWER: comptime_int) comptime type {
             }
         }
         // Get a slice of bits from the giant hash value.
-        fn getBitSlice(hash: Hash, index: u32) u64 {
+        fn getBitSlice(hash: Hash, index: u32) usize {
             const offset = @intCast(u8, index * BRANCH_POWER);
-            return @intCast(u64, (hash >> offset) & ((2 << (BRANCH_POWER - 1)) - 1));
+            return @intCast(usize, (hash >> offset) & ((2 << (BRANCH_POWER - 1)) - 1));
         }
     };
 }
@@ -196,6 +196,7 @@ test "reading and writing..." {
         // std.debug.print("Map.BRANCH_POWER = {}\n", .{Map.BRANCH_POWER});
 
         var map = try Map.init(std.testing.allocator);
+
         defer map.deinit();
         maxLevel = 0;
         branchCount = 0;
@@ -213,7 +214,8 @@ test "reading and writing..." {
             try map.store(&block, &digest);
 
             // Make sure we can retrieve it back.
-            std.testing.expectEqualSlices(u8, &block, map.fetch(&digest) orelse return error.ExpectedValueNotReturned);
+            const stored1: *const Map.Block = map.fetch(&digest) orelse return error.NotFound;
+            std.testing.expectEqualSlices(u8, &block, stored1);
 
             // test with end of hash wrong and verify it's not found.
             digest[3] += 1;
@@ -223,10 +225,10 @@ test "reading and writing..." {
             try map.store(&block, &digest);
 
             // Make sure we can retrieve it back again
-            const stored = (map.fetch(&digest)) orelse return error.ExpectedValueNotReturned;
-            std.testing.expectEqualSlices(u8, &block, stored);
+            const stored2: *const Map.Block = map.fetch(&digest) orelse return error.NotFound;
+            std.testing.expectEqualSlices(u8, &block, stored2);
             // Make sure it stored a copy of the memory we gave it.
-            std.testing.expect(stored != &block);
+            std.testing.expect(stored2 != &block);
 
             // Test with start of hash wrong and verify it's not found.
             digest[0] += 1;
