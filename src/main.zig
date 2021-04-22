@@ -180,18 +180,18 @@ fn AutoBlock(comptime BLOCK_POWER: comptime_int, comptime RECURSION_LEVEL: compt
         rootHash: Digest,
 
         const BLOCK_SIZE = HashTrie.BLOCK_SIZE;
-        const BLOCK_COUNT = 2 << ((BLOCK_POWER - 5) * RECURSION_LEVEL);
+        const BLOCK_COUNT = 2 << ((BLOCK_POWER - 5) * RECURSION_LEVEL) >> 1;
 
         pub fn init(allocator: *std.mem.Allocator) !Self {
             var trie = try HashTrie.init(allocator);
             var rootHash = [_]u64{0} ** 4;
-            var blocky: [BLOCK_SIZE >> 3]u64 = [_]u64{0} ** (BLOCK_SIZE >> 3);
+            var blocky = [_]u64{0} ** (BLOCK_SIZE >> 3);
             var block = @ptrCast(*[BLOCK_SIZE]u8, &blocky);
             try trie.store(block, &(rootHash));
-            comptime var i = 0;
-            inline while (i < RECURSION_LEVEL) : (i += 1) {
-                comptime var j = 0;
-                inline while (j < (BLOCK_SIZE >> 5)) : (j += 1) {
+            var i: usize = 0;
+            while (i < RECURSION_LEVEL) : (i += 1) {
+                var j: usize = 0;
+                while (j < (BLOCK_SIZE >> 5)) : (j += 1) {
                     std.mem.copy(u64, blocky[j << 2 ..], &rootHash);
                 }
                 try trie.store(block, &rootHash);
@@ -206,9 +206,15 @@ fn AutoBlock(comptime BLOCK_POWER: comptime_int, comptime RECURSION_LEVEL: compt
 }
 
 test "autoblock init/deinit" {
-    const Block = AutoBlock(12, 3);
-    var block = try Block.init(std.testing.allocator);
-    defer block.deinit();
+    inline for (.{ 12, 15 }) |BLOCK_POWER| {
+        inline for (.{ 0, 1, 2, 3 }) |RECURSION_LEVEL| {
+            std.debug.print("\nBLOCK_POWER {} RECURSION_LEVEL {}\n", .{ BLOCK_POWER, RECURSION_LEVEL });
+            const Block = AutoBlock(BLOCK_POWER, RECURSION_LEVEL);
+            var block = try Block.init(std.testing.allocator);
+            defer block.deinit();
+            std.debug.print("BLOCK_SIZE {} BLOCK_COUNT {} TOTAL_SIZE {}\n", .{ Block.BLOCK_SIZE, Block.BLOCK_COUNT, Block.BLOCK_SIZE * Block.BLOCK_COUNT });
+        }
+    }
 }
 
 test "Check for leaks in init/deinit" {
