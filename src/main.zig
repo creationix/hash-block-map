@@ -8,7 +8,7 @@ var leafCount: usize = 0;
 var branchCount: usize = 0;
 var maxLevel: usize = 0;
 
-fn autoMap(comptime BLOCK_POWER: comptime_int) comptime type {
+fn AutoMap(comptime BLOCK_POWER: comptime_int) type {
     return struct {
         const Self = @This();
 
@@ -171,9 +171,49 @@ fn autoMap(comptime BLOCK_POWER: comptime_int) comptime type {
     };
 }
 
+fn AutoBlock(comptime BLOCK_POWER: comptime_int, comptime RECURSION_LEVEL: comptime_int) type {
+    return struct {
+        const Self = @This();
+        const HashTrie = AutoMap(BLOCK_POWER);
+
+        trie: HashTrie,
+        rootHash: Digest,
+
+        const BLOCK_SIZE = HashTrie.BLOCK_SIZE;
+        const BLOCK_COUNT = 2 << ((BLOCK_POWER - 5) * RECURSION_LEVEL);
+
+        pub fn init(allocator: *std.mem.Allocator) !Self {
+            var trie = try HashTrie.init(allocator);
+            var rootHash = [_]u64{0} ** 4;
+            var blocky: [BLOCK_SIZE >> 3]u64 = [_]u64{0} ** (BLOCK_SIZE >> 3);
+            var block = @ptrCast(*[BLOCK_SIZE]u8, &blocky);
+            try trie.store(block, &(rootHash));
+            comptime var i = 0;
+            inline while (i < RECURSION_LEVEL) : (i += 1) {
+                comptime var j = 0;
+                inline while (j < (BLOCK_SIZE >> 5)) : (j += 1) {
+                    std.mem.copy(u64, blocky[j << 2 ..], &rootHash);
+                }
+                try trie.store(block, &rootHash);
+            }
+            return Self{ .trie = trie, .rootHash = rootHash };
+        }
+
+        pub fn deinit(self: *Self) void {
+            self.trie.deinit();
+        }
+    };
+}
+
+test "autoblock init/deinit" {
+    const Block = AutoBlock(12, 3);
+    var block = try Block.init(std.testing.allocator);
+    defer block.deinit();
+}
+
 test "Check for leaks in init/deinit" {
     inline for (.{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 }) |BLOCK_POWER| {
-        const Map = autoMap(BLOCK_POWER);
+        const Map = AutoMap(BLOCK_POWER);
         var map = try Map.init(std.testing.allocator);
         defer map.deinit();
     }
@@ -183,14 +223,14 @@ test "Check for leaks in init/deinit" {
 // that keeps the branch nodes no bigger than the leaf nodes.
 test "Ensure proper branch factor" {
     inline for (.{ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 }) |BLOCK_POWER| {
-        const Map = autoMap(BLOCK_POWER);
+        const Map = AutoMap(BLOCK_POWER);
         std.testing.expect(@sizeOf(Map.Branch) <= @sizeOf(Map.Leaf));
     }
 }
 
 test "reading and writing..." {
     inline for (.{ 3, 6, 9, 12, 15 }) |BLOCK_POWER| {
-        const Map = autoMap(BLOCK_POWER);
+        const Map = AutoMap(BLOCK_POWER);
         // std.debug.print("\nBLOCK_POWER = {}\n", .{BLOCK_POWER});
         // std.debug.print("Map.BLOCK_SIZE = {}\n", .{Map.BLOCK_SIZE});
         // std.debug.print("Map.BRANCH_POWER = {}\n", .{Map.BRANCH_POWER});
@@ -245,7 +285,7 @@ pub fn main() anyerror!void {
     const allocator = &arena.allocator;
     // const allocator = std.heap.page_allocator;
 
-    const Map = autoMap(10);
+    const Map = AutoMap(10);
     var map = try Map.init(allocator);
     // defer map.deinit();
 
